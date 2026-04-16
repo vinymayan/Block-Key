@@ -2,7 +2,7 @@
 
 namespace Settings {
     inline bool _isCurrentlyBlocking = false;
-    inline int BlockActionID = 0;
+    inline int BlockActionID = -1;
     inline bool EnableMagicBlock = true;
     inline bool DisableBlockLeft = true;
 }

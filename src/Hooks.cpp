@@ -3,6 +3,7 @@
 
 void GetAttackKeys()
 {
+	logger::info("Getting attack keys");
 	auto controlMap = RE::ControlMap::GetSingleton();
 	auto userEvents = RE::UserEvents::GetSingleton();
 	if (controlMap && userEvents) {
@@ -11,6 +12,7 @@ void GetAttackKeys()
 		LeftMouse += 256;
 		LeftGamepad = controlMap->GetMappedKey(userEvents->leftAttack, RE::INPUT_DEVICE::kGamepad);
 	}
+	logger::info("Left Attack Keys: Keyboard: {}, Mouse: {}, Gamepad: {}", LeftKeyboard, LeftMouse, LeftGamepad);
 }
 
 bool HasMagicEquipped(RE::Actor* actor) {
