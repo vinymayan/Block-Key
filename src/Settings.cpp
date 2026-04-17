@@ -16,8 +16,7 @@ namespace ImGui = ImGuiMCP;
 namespace BlockModMenu {
 
     const char* SETTINGS_PATH = "Data/SKSE/Plugins/JusBlock_Settings.json";
-    inline const char* actionStateNames[] = { "Ignore", "Tap", "Hold", "Press" };
-    inline const char* mainActionNames[] = { "Hold", "Press" };
+    inline const char* actionStateNames[] = { "Ignore", "Tap", "Hold", "Gesture", "Press" };
     constexpr uint32_t MOUSE_OFFSET = 256;
     constexpr uint32_t GAMEPAD_OFFSET = 266;
 
@@ -179,12 +178,10 @@ namespace BlockModMenu {
     static int ui_pcMainIdx = 0;
     static int ui_pcModIdx = 0;
     static int current_pcModAct = 0;
-    static int ui_pcMainActIdx = 0;
     // Gamepad
     static int ui_padMainIdx = 0;
     static int ui_padModIdx = 0;
     static int current_padModAct = 0;
-    static int ui_padMainActIdx = 0;
     // Feedback Visual
     static std::string updateStatusMsg = "";
     static bool updateSuccess = false;
@@ -318,12 +315,10 @@ namespace BlockModMenu {
 
                         ui_pcMainIdx = GetIndexFromID(edit_info.pcMainKey, pcKeyIDs, std::size(pcKeyIDs));
                         current_pcModAct = edit_info.pcModAction;
-                        ui_pcMainActIdx = (edit_info.pcMainAction == 4) ? 1 : 0;
                         ui_pcModIdx = GetIndexFromID(edit_info.pcModifierKey, pcKeyIDs, std::size(pcKeyIDs));
 
                         ui_padMainIdx = GetIndexFromID(edit_info.gamepadMainKey, gamepadKeyIDs, std::size(gamepadKeyIDs));
                         current_padModAct = edit_info.gamepadModAction;
-                        ui_padMainActIdx = (edit_info.gamepadMainAction == 4) ? 1 : 0;
                         ui_padModIdx = GetIndexFromID(edit_info.gamepadModifierKey, gamepadKeyIDs, std::size(gamepadKeyIDs)); 
 
                         updateStatusMsg = "";
@@ -339,11 +334,15 @@ namespace BlockModMenu {
                         edit_info.pcMainKey = pcKeyIDs[ui_pcMainIdx];
                     }
 
-                    if (ImGuiMCP::Combo("PC Mod Action", &current_pcModAct, actionStateNames, 5)) {
-                        if (current_pcModAct == 3) current_pcModAct = 0;
+                    if (ImGuiMCP::Combo("PC Main Action", &edit_info.pcMainAction, actionStateNames, std::size(actionStateNames))) {
+                        if (edit_info.pcMainAction != 2 && edit_info.pcMainAction != 4) {
+                            edit_info.pcMainAction = 0;
+                        }
                     }
 
-                    ImGuiMCP::Combo("PC Mod Action", &current_pcModAct, actionStateNames, std::size(actionStateNames));
+                    if (ImGuiMCP::Combo("PC Mod Action", &current_pcModAct, actionStateNames, std::size(actionStateNames))) {
+                        if (current_pcModAct == 3) current_pcModAct = 0;
+                    }
 
                     if (current_pcModAct != edit_info.pcModAction) {
                         if (current_pcModAct != 0) {
@@ -377,11 +376,13 @@ namespace BlockModMenu {
                         edit_info.gamepadMainKey = gamepadKeyIDs[ui_padMainIdx];
                     }
 
-                    if (ImGuiMCP::Combo("Pad Main Action", &ui_padMainActIdx, mainActionNames, 2)) {
-                        edit_info.gamepadMainAction = (ui_padMainActIdx == 1) ? 4 : 2;
+                    if (ImGuiMCP::Combo("Pad Main Action", &edit_info.gamepadMainAction, actionStateNames, std::size(actionStateNames))) {
+                        if (edit_info.gamepadMainAction != 2 && edit_info.gamepadMainAction != 4) {
+                            edit_info.gamepadMainAction = 0;
+                        }
                     }
 
-                    if (ImGuiMCP::Combo("Pad Mod Action", &current_padModAct, actionStateNames, 5)) {
+                    if (ImGuiMCP::Combo("Pad Mod Action", &current_padModAct, actionStateNames, std::size(actionStateNames))) {
                         if (current_padModAct == 3) current_padModAct = 0;
                     }
 
