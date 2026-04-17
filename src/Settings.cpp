@@ -16,8 +16,8 @@ namespace ImGui = ImGuiMCP;
 namespace BlockModMenu {
 
     const char* SETTINGS_PATH = "Data/SKSE/Plugins/JusBlock_Settings.json";
-    inline const char* actionStateNames[] = { "Ignore", "Tap", "Hold" };
-
+    inline const char* actionStateNames[] = { "Ignore", "Tap", "Hold", "Press" };
+    inline const char* mainActionNames[] = { "Hold", "Press" };
     constexpr uint32_t MOUSE_OFFSET = 256;
     constexpr uint32_t GAMEPAD_OFFSET = 266;
 
@@ -179,12 +179,12 @@ namespace BlockModMenu {
     static int ui_pcMainIdx = 0;
     static int ui_pcModIdx = 0;
     static int current_pcModAct = 0;
-
+    static int ui_pcMainActIdx = 0;
     // Gamepad
     static int ui_padMainIdx = 0;
     static int ui_padModIdx = 0;
     static int current_padModAct = 0;
-
+    static int ui_padMainActIdx = 0;
     // Feedback Visual
     static std::string updateStatusMsg = "";
     static bool updateSuccess = false;
@@ -264,7 +264,9 @@ namespace BlockModMenu {
                 auto info = InputManagerAPI::_API->GetActionInfo(ui_selectedActionID);
                 previewValue = "[" + std::to_string(ui_selectedActionID) + "] " + (info.name ? std::string(info.name) : "Unnamed");
 
-                if (info.pcMainAction != 2 && info.gamepadMainAction != 2) {
+                bool isPcValid = (info.pcMainAction == 2 || info.pcMainAction == 4);
+                bool isPadValid = (info.gamepadMainAction == 2 || info.gamepadMainAction == 4);
+                if (!isPcValid && !isPadValid) {
                     isValidHold = false;
                 }
             }
@@ -298,7 +300,7 @@ namespace BlockModMenu {
             // O aviso foi alterado para deixar claro que a alteração foi pausada
             if (!isValidHold && ui_selectedActionID != -1) {
                 ImGui::TextColored(ImGui::ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-                    "Warning: Block requires a HOLD action! The selected input will not be saved until updated to a Hold action.");
+                    "Warning: Block requires a HOLD or PRESS action! The selected input will not be saved until updated.");
             }
 
             // Utiliza ui_selectedActionID daqui pra baixo para exibir a edição
@@ -316,10 +318,12 @@ namespace BlockModMenu {
 
                         ui_pcMainIdx = GetIndexFromID(edit_info.pcMainKey, pcKeyIDs, std::size(pcKeyIDs));
                         current_pcModAct = edit_info.pcModAction;
+                        ui_pcMainActIdx = (edit_info.pcMainAction == 4) ? 1 : 0;
                         ui_pcModIdx = GetIndexFromID(edit_info.pcModifierKey, pcKeyIDs, std::size(pcKeyIDs));
 
                         ui_padMainIdx = GetIndexFromID(edit_info.gamepadMainKey, gamepadKeyIDs, std::size(gamepadKeyIDs));
                         current_padModAct = edit_info.gamepadModAction;
+                        ui_padMainActIdx = (edit_info.gamepadMainAction == 4) ? 1 : 0;
                         ui_padModIdx = GetIndexFromID(edit_info.gamepadModifierKey, gamepadKeyIDs, std::size(gamepadKeyIDs)); 
 
                         updateStatusMsg = "";
@@ -335,8 +339,9 @@ namespace BlockModMenu {
                         edit_info.pcMainKey = pcKeyIDs[ui_pcMainIdx];
                     }
 
-                    ImGuiMCP::TextColored({ 0.5f, 0.5f, 0.5f, 1.0f }, "PC Main Action forced to: Hold (0.01s)");
-                    edit_info.pcMainAction = 2;
+                    if (ImGuiMCP::Combo("PC Mod Action", &current_pcModAct, actionStateNames, 5)) {
+                        if (current_pcModAct == 3) current_pcModAct = 0;
+                    }
 
                     ImGuiMCP::Combo("PC Mod Action", &current_pcModAct, actionStateNames, std::size(actionStateNames));
 
@@ -372,10 +377,13 @@ namespace BlockModMenu {
                         edit_info.gamepadMainKey = gamepadKeyIDs[ui_padMainIdx];
                     }
 
-                    ImGuiMCP::TextColored({ 0.5f, 0.5f, 0.5f, 1.0f }, "Pad Main Action forced to: Hold (0.01s)");
-                    edit_info.gamepadMainAction = 2;
+                    if (ImGuiMCP::Combo("Pad Main Action", &ui_padMainActIdx, mainActionNames, 2)) {
+                        edit_info.gamepadMainAction = (ui_padMainActIdx == 1) ? 4 : 2;
+                    }
 
-                    ImGuiMCP::Combo("Pad Mod Action", &current_padModAct, actionStateNames, std::size(actionStateNames));
+                    if (ImGuiMCP::Combo("Pad Mod Action", &current_padModAct, actionStateNames, 5)) {
+                        if (current_padModAct == 3) current_padModAct = 0;
+                    }
 
                     if (current_padModAct != edit_info.gamepadModAction) {
                         if (current_padModAct != 0) {
@@ -403,8 +411,6 @@ namespace BlockModMenu {
 
                     if (ImGuiMCP::Button("Update Mapping and Save")) {
                         edit_info.name = edit_nameBuf;
-                        edit_info.useCustomTimings = true;
-                        edit_info.holdDuration = 0.01f;
 
                         bool success = InputManagerAPI::_API->UpdateActionMapping(ui_selectedActionID, edit_info);
                         if (success) {
