@@ -6,6 +6,7 @@ inline RE::BGSEquipSlot* LeftSlot = nullptr;
 inline std::uint32_t LeftKeyboard = 0;
 inline std::uint32_t LeftMouse = 0;
 inline std::uint32_t LeftGamepad = 0;
+
 namespace Idles {
 	inline RE::TESIdleForm* BlockStart = nullptr;
 	inline RE::TESIdleForm* BlockStop = nullptr;

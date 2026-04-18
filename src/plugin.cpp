@@ -18,7 +18,21 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         Block_InputManagerListener::GetSingleton()->Register();
         AttackStateManager::GetSingleton()->Register();
         if (InputManagerAPI::_API) {
-            if (Settings::BlockActionID != -1) InputManagerAPI::_API->UpdateListener(0,Settings::BlockActionID, "Just a Block", "Block", true);
+            if (Settings::BlockActionID != -1) {
+                // Define os estados válidos para a Main Key (2 = Hold, 4 = Press)
+                int validMain[] = { 2, 4 };
+                InputManagerAPI::_API->UpdateListener(
+                    0,                          // Tipo de Input (0 = Action)
+                    Settings::BlockActionID,    // ID da Ação
+                    "Just a Block",             // Nome do Mod
+                    "Block",                    // Propósito
+                    true,                       // isRegistering
+                    validMain,                  // Array com os estados permitidos para a Main Key
+                    2,                          // Quantidade de estados no array validMain
+                    nullptr,                    // Array de estados permitidos para o Modificador (nulo = livre)
+                    0                           // Quantidade de estados no array do Modificador
+                );
+            }
         }
     }
     if (message->type == SKSE::MessagingInterface::kNewGame || message->type == SKSE::MessagingInterface::kPostLoadGame) {
