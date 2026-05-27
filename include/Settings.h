@@ -7,9 +7,11 @@
 
 namespace Settings {
     inline bool _isCurrentlyBlocking = false;
-    inline int BlockActionID = -1;
+    inline std::vector<int> BlockActionIDs;
+    inline std::vector<int> BlockMotionIDs;
     inline bool EnableMagicBlock = true;
     inline bool DisableBlockLeft = true;
+    inline bool CancelDodgeWithBlock = false;
 }
 
 namespace BlockModMenu {
@@ -118,5 +120,9 @@ namespace BlockModMenu {
         RE::BSWin32GamepadDevice::Keys::kY + GAMEPAD_OFFSET
     };
 
+    void TweenPauseRegister();
+    void UnregisterInputCategory(const std::string& actionId);
+    void RegisterAllInputs();
+	void SaveSettings();
     void Register();
 }

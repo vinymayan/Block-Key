@@ -78,92 +78,167 @@ bool IsAnyMenuOpen() {
 	return false;
 }
 
+void StartBlocking(RE::PlayerCharacter* player) {
+	if (!player) return;
+
+	if (Settings::CancelDodgeWithBlock) {
+		player->NotifyAnimationGraph("BF_DodgeStop");
+	}
+
+	player->SetGraphVariableInt("IsBlockingCMF", 1);
+	Settings::_isCurrentlyBlocking = true;
+
+	if (Settings::EnableMagicBlock && HasMagicEquipped(player)) {
+		player->SetGraphVariableBool("IsMagicBlockingCMF", true);
+		auto equipManager = RE::ActorEquipManager::GetSingleton();
+
+		// Verifica e salva a magia da mão direita
+		auto rightHandObj = player->GetEquippedObject(false);
+		if (rightHandObj && rightHandObj->GetFormType() == RE::FormType::Spell) {
+			g_savedRightHandSpell = rightHandObj->As<RE::SpellItem>();
+			if (equipManager && RightSlot) {
+				equipManager->UnequipObject(player, g_savedRightHandSpell, nullptr, 1, RightSlot, false, true, false, true);
+			}
+		}
+
+		// Verifica e salva a magia da mão esquerda
+		auto leftHandObj = player->GetEquippedObject(true);
+		if (leftHandObj && leftHandObj->GetFormType() == RE::FormType::Spell) {
+			g_savedLeftHandSpell = leftHandObj->As<RE::SpellItem>();
+			if (equipManager && LeftSlot) {
+				equipManager->UnequipObject(player, g_savedLeftHandSpell, nullptr, 1, LeftSlot, false, true, false, true);
+			}
+		}
+	}
+
+	if (Idles::BlockStart && Idles::BlockStart->conditions.IsTrue(player, player)) {
+		Idles::PlayIdleAnimation(player, Idles::BlockStart);
+	}
+}
+
+void StopBlocking(RE::PlayerCharacter* player) {
+	if (!player) return;
+
+	Settings::_isCurrentlyBlocking = false;
+	player->SetGraphVariableInt("IsBlockingCMF", 0);
+	player->SetGraphVariableBool("IsMagicBlockingCMF", false);
+
+	if (Idles::BlockStop && Idles::BlockStop->conditions.IsTrue(player, player)) {
+		Idles::PlayIdleAnimation(player, Idles::BlockStop);
+	}
+
+	auto equipManager = RE::ActorEquipManager::GetSingleton();
+	if (g_savedRightHandSpell) {
+		if (!player->GetEquippedObject(false) && player->HasSpell(g_savedRightHandSpell)) {
+			if (equipManager && RightSlot) {
+				equipManager->EquipObject(player, g_savedRightHandSpell, nullptr, 1, RightSlot, false, false, false, true);
+			}
+		}
+		g_savedRightHandSpell = nullptr;
+	}
+
+	if (g_savedLeftHandSpell) {
+		if (!player->GetEquippedObject(true) && player->HasSpell(g_savedLeftHandSpell)) {
+			if (equipManager && LeftSlot) {
+				equipManager->EquipObject(player, g_savedLeftHandSpell, nullptr, 1, LeftSlot, false, false, false, true);
+			}
+		}
+		g_savedLeftHandSpell = nullptr;
+	}
+
+	if (!Settings::DisableBlockLeft) {
+		player->SetGraphVariableInt("IsBlockingCMF", 1);
+	}
+}
+
 RE::BSEventNotifyControl Block_InputManagerListener::ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>*)
 {
-    if (!a_event) return RE::BSEventNotifyControl::kContinue;
+	if (!a_event) return RE::BSEventNotifyControl::kContinue;
 
-    std::string_view eventName = a_event->eventName.c_str();
-    int actionID = static_cast<int>(a_event->numArg);
+	std::string_view eventName = a_event->eventName.c_str();
+	int actionID = static_cast<int>(a_event->numArg);
 
-    auto player = RE::PlayerCharacter::GetSingleton();
-    if (!player || !player->Is3DLoaded() || IsAnyMenuOpen()) {
-        return RE::BSEventNotifyControl::kContinue;
-    }
+	// 1. ATUALIZAÇÃO DINÂMICA VIA TWEENPAUSE (INTERFACE)
+	if (eventName == "TweenPause_ControlUpdated") {
+		rapidjson::Document doc;
+		doc.Parse(a_event->strArg.c_str());
 
-    const auto playerState = player->AsActorState();
-    if (!(!player->IsInKillMove() && playerState->GetWeaponState() == RE::WEAPON_STATE::kDrawn &&
-        playerState->GetSitSleepState() == RE::SIT_SLEEP_STATE::kNormal &&
-        playerState->GetFlyState() == RE::FLY_STATE::kNone)) {
-        return RE::BSEventNotifyControl::kContinue;
-    }
+		if (!doc.HasParseError() && doc.IsObject()) {
+			std::string actionId = doc["actionId"].GetString();
 
-    if (eventName == "InputManager_ActionTriggered") {
-        if (actionID == Settings::BlockActionID) {
-			player->SetGraphVariableInt("IsBlockingCMF", 1);
-			Settings::_isCurrentlyBlocking = true;
-			if (Settings::EnableMagicBlock && HasMagicEquipped(player)) {
-				player->SetGraphVariableBool("IsMagicBlockingCMF", true);
+			if (actionId == "Block") {
+				BlockModMenu::UnregisterInputCategory(actionId);
 
-				auto equipManager = RE::ActorEquipManager::GetSingleton();
+				std::vector<int> newActions;
+				std::vector<int> newMotions;
 
-				// Verifica e salva a magia da mão direita
-				auto rightHandObj = player->GetEquippedObject(false);
-				if (rightHandObj && rightHandObj->GetFormType() == RE::FormType::Spell) {
-					g_savedRightHandSpell = rightHandObj->As<RE::SpellItem>();
-					if (equipManager && RightSlot) {
-						equipManager->UnequipObject(player, g_savedRightHandSpell, nullptr, 1, RightSlot, false, true, false, true);
+				if (doc.HasMember("mappedIds") && doc["mappedIds"].IsArray()) {
+					for (auto& bind : doc["mappedIds"].GetArray()) {
+						if (bind.HasMember("actionID") && bind["actionID"].IsInt()) newActions.push_back(bind["actionID"].GetInt());
+						if (bind.HasMember("motionID") && bind["motionID"].IsInt()) newMotions.push_back(bind["motionID"].GetInt());
 					}
 				}
 
-				// Verifica e salva a magia da mão esquerda
-				auto leftHandObj = player->GetEquippedObject(true);
-				if (leftHandObj && leftHandObj->GetFormType() == RE::FormType::Spell) {
-					g_savedLeftHandSpell = leftHandObj->As<RE::SpellItem>();
-					if (equipManager && LeftSlot) {
-						equipManager->UnequipObject(player, g_savedLeftHandSpell, nullptr, 1, LeftSlot, false, true, false, true);
-					}
-				}
-			}
+				Settings::BlockActionIDs = newActions;
+				Settings::BlockMotionIDs = newMotions;
 
-			if (Idles::BlockStart && Idles::BlockStart->conditions.IsTrue(player, player)) {
-				Idles::PlayIdleAnimation(player, Idles::BlockStart);
+				BlockModMenu::RegisterAllInputs();
+				BlockModMenu::SaveSettings();
 			}
-			
-        }
+		}
+		return RE::BSEventNotifyControl::kContinue;
+	}
 
-    }
-    else if (eventName == "InputManager_ActionReleased") {
-        if (actionID == Settings::BlockActionID) {
-            Settings::_isCurrentlyBlocking = false;
-			player->SetGraphVariableInt("IsBlockingCMF", 0);
-			player->SetGraphVariableBool("IsMagicBlockingCMF", false);
-			if (Idles::BlockStop && Idles::BlockStop->conditions.IsTrue(player, player)) {
-				Idles::PlayIdleAnimation(player, Idles::BlockStop);
-			}
-			auto equipManager = RE::ActorEquipManager::GetSingleton();
-			if (g_savedRightHandSpell) {
-				if (!player->GetEquippedObject(false) && player->HasSpell(g_savedRightHandSpell)) {
-					if (equipManager && RightSlot) {
-						equipManager->EquipObject(player, g_savedRightHandSpell, nullptr, 1, RightSlot, false, false, false, true);
-					}
-				}
-				g_savedRightHandSpell = nullptr;
-			}
+	// Validações de Estado do Player
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player || !player->Is3DLoaded() || (IsAnyMenuOpen() && player->IsStaggering())) {
+		return RE::BSEventNotifyControl::kContinue;
+	}
 
-			if (g_savedLeftHandSpell) {
-				if (!player->GetEquippedObject(true) && player->HasSpell(g_savedLeftHandSpell)) {
-					if (equipManager && LeftSlot) {
-						equipManager->EquipObject(player, g_savedLeftHandSpell, nullptr, 1, LeftSlot, false, false, false, true);
-					}
-				}
-				g_savedLeftHandSpell = nullptr;
+	const auto playerState = player->AsActorState();
+	if (!(!player->IsInKillMove() && playerState->GetWeaponState() == RE::WEAPON_STATE::kDrawn &&
+		playerState->GetSitSleepState() == RE::SIT_SLEEP_STATE::kNormal &&
+		playerState->GetFlyState() == RE::FLY_STATE::kNone)) {
+		return RE::BSEventNotifyControl::kContinue;
+	}
+
+	// Lambda para verificar a existência do ID nos novos vetores
+	auto HasInput = [](const std::vector<int>& list, int id) {
+		return std::find(list.begin(), list.end(), id) != list.end();
+		};
+
+	// 2. LÓGICA DE PROCESSAMENTO DOS INPUTS (ACTIONS / MOTIONS)
+	if (eventName == "InputManager_ActionTriggered") {
+		if (HasInput(Settings::BlockActionIDs, actionID)) {
+			// Se já estiver bloqueando, o novo comando desliga o bloco (comportamento Toggle para Tap)
+			if (Settings::_isCurrentlyBlocking) {
+				StopBlocking(player);
 			}
-			if (!Settings::DisableBlockLeft) {
-				player->SetGraphVariableInt("IsBlockingCMF", 1);
+			else {
+				StartBlocking(player);
 			}
-        }
-    }
-    return RE::BSEventNotifyControl::kContinue;
+		}
+	}
+	else if (eventName == "InputManager_MotionTriggered") {
+		if (HasInput(Settings::BlockMotionIDs, actionID)) {
+			// Comportamento Toggle também aplicado a movimentos/analógicos detectados
+			if (Settings::_isCurrentlyBlocking) {
+				StopBlocking(player);
+			}
+			else {
+				StartBlocking(player);
+			}
+		}
+	}
+	else if (eventName == "InputManager_ActionReleased") {
+		if (HasInput(Settings::BlockActionIDs, actionID)) {
+			if (Settings::_isCurrentlyBlocking) {
+				StopBlocking(player);
+			}
+		}
+	}
+
+	return RE::BSEventNotifyControl::kContinue;
 }
 
 RE::BSEventNotifyControl PlayerAnimGraphListener::ProcessEvent(const RE::BSAnimationGraphEvent* a_event, RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_eventSource)
@@ -180,12 +255,16 @@ RE::BSEventNotifyControl PlayerAnimGraphListener::ProcessEvent(const RE::BSAnima
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		std::string_view eventName = a_event->tag.c_str();
+
 		if (eventName == "bashStop" || eventName == "attackStop" || eventName == "staggerStop") {
 			if (Settings::_isCurrentlyBlocking) {
 				if (Idles::BlockStart && Idles::BlockStart->conditions.IsTrue(player, player)) {
 					Idles::PlayIdleAnimation(player, Idles::BlockStart);
 				}
 			}
+		}
+		else if (eventName == "blockStart") {
+			Settings::_isCurrentlyBlocking = true;
 		}
 	}
 	return RE::BSEventNotifyControl::kContinue;
