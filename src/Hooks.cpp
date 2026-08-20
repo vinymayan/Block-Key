@@ -78,6 +78,12 @@ bool IsAnyMenuOpen() {
 	return false;
 }
 
+void StartCustomBlock(RE::Actor* actor) {
+	if (!actor) return;
+	actor->SetGraphVariableBool("isBlockingCMF", true);
+	actor->NotifyAnimationGraph("VVV_BlockStart");
+}
+
 void StartBlocking(RE::PlayerCharacter* player) {
 	if (!player) return;
 
@@ -85,35 +91,9 @@ void StartBlocking(RE::PlayerCharacter* player) {
 		player->NotifyAnimationGraph("BF_DodgeStop");
 	}
 
-	player->SetGraphVariableInt("IsBlockingCMF", 1);
 	Settings::_isCurrentlyBlocking = true;
 
-	if (Settings::EnableMagicBlock && HasMagicEquipped(player)) {
-		player->SetGraphVariableBool("IsMagicBlockingCMF", true);
-		auto equipManager = RE::ActorEquipManager::GetSingleton();
-
-		// Verifica e salva a magia da mão direita
-		auto rightHandObj = player->GetEquippedObject(false);
-		if (rightHandObj && rightHandObj->GetFormType() == RE::FormType::Spell) {
-			g_savedRightHandSpell = rightHandObj->As<RE::SpellItem>();
-			if (equipManager && RightSlot) {
-				equipManager->UnequipObject(player, g_savedRightHandSpell, nullptr, 1, RightSlot, false, true, false, true);
-			}
-		}
-
-		// Verifica e salva a magia da mão esquerda
-		auto leftHandObj = player->GetEquippedObject(true);
-		if (leftHandObj && leftHandObj->GetFormType() == RE::FormType::Spell) {
-			g_savedLeftHandSpell = leftHandObj->As<RE::SpellItem>();
-			if (equipManager && LeftSlot) {
-				equipManager->UnequipObject(player, g_savedLeftHandSpell, nullptr, 1, LeftSlot, false, true, false, true);
-			}
-		}
-	}
-
-	if (Idles::BlockStart && Idles::BlockStart->conditions.IsTrue(player, player)) {
-		Idles::PlayIdleAnimation(player, Idles::BlockStart);
-	}
+	StartCustomBlock(player);
 }
 
 void StopBlocking(RE::PlayerCharacter* player) {
@@ -122,33 +102,14 @@ void StopBlocking(RE::PlayerCharacter* player) {
 	Settings::_isCurrentlyBlocking = false;
 	player->SetGraphVariableInt("IsBlockingCMF", 0);
 	player->SetGraphVariableBool("IsMagicBlockingCMF", false);
+	if (auto actorState = player->AsActorState()) {
+		actorState->actorState2.wantBlocking = false;
+	}
 
 	if (Idles::BlockStop && Idles::BlockStop->conditions.IsTrue(player, player)) {
 		Idles::PlayIdleAnimation(player, Idles::BlockStop);
 	}
-
-	auto equipManager = RE::ActorEquipManager::GetSingleton();
-	if (g_savedRightHandSpell) {
-		if (!player->GetEquippedObject(false) && player->HasSpell(g_savedRightHandSpell)) {
-			if (equipManager && RightSlot) {
-				equipManager->EquipObject(player, g_savedRightHandSpell, nullptr, 1, RightSlot, false, false, false, true);
-			}
-		}
-		g_savedRightHandSpell = nullptr;
-	}
-
-	if (g_savedLeftHandSpell) {
-		if (!player->GetEquippedObject(true) && player->HasSpell(g_savedLeftHandSpell)) {
-			if (equipManager && LeftSlot) {
-				equipManager->EquipObject(player, g_savedLeftHandSpell, nullptr, 1, LeftSlot, false, false, false, true);
-			}
-		}
-		g_savedLeftHandSpell = nullptr;
-	}
-
-	if (!Settings::DisableBlockLeft) {
-		player->SetGraphVariableInt("IsBlockingCMF", 1);
-	}
+	//player->NotifyAnimationGraph("VVV_BlockStop");
 }
 
 RE::BSEventNotifyControl Block_InputManagerListener::ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>*)
@@ -157,6 +118,16 @@ RE::BSEventNotifyControl Block_InputManagerListener::ProcessEvent(const SKSE::Mo
 
 	std::string_view eventName = a_event->eventName.c_str();
 	int actionID = static_cast<int>(a_event->numArg);
+
+	if (eventName == "TweenPauseReady") {
+		InputManagerAPI::RequestAPIDirect();
+		if (InputManagerAPI::_API) {
+			BlockModMenu::RegisterAllInputs();
+			BlockModMenu::TweenPauseRegister();
+			SKSE::log::info("TweenPauseReady recebido; controles enviados ao Tween Pause.");
+		}
+		return RE::BSEventNotifyControl::kContinue;
+	}
 
 	// 1. ATUALIZAÇÃO DINÂMICA VIA TWEENPAUSE (INTERFACE)
 	if (eventName == "TweenPause_ControlUpdated") {
@@ -258,9 +229,7 @@ RE::BSEventNotifyControl PlayerAnimGraphListener::ProcessEvent(const RE::BSAnima
 
 		if (eventName == "bashStop" || eventName == "attackStop" || eventName == "staggerStop") {
 			if (Settings::_isCurrentlyBlocking) {
-				if (Idles::BlockStart && Idles::BlockStart->conditions.IsTrue(player, player)) {
-					Idles::PlayIdleAnimation(player, Idles::BlockStart);
-				}
+				StartCustomBlock(player);
 			}
 		}
 		else if (eventName == "blockStart") {
